@@ -63,23 +63,30 @@ Conceptually, the workflow does:
 
 2. **Grace period & awaiting validation**
    - Sleep for the configured grace period (Temporal timer).
-   - Update the order state to *AwaitingValidation* via an Ordering activity.
+   
 
-3. **Stock check**
-   - Call a Catalog activity to validate stock for all order items.
-   - If everything is available, record “stock confirmed”.
-   - If any item is missing, record “stock rejected” with item-level details and mark the order as cancelled.
+3. **Resume the Order flow**
+    - After a grace period (a few seconds), resume the Ordering flow by notifying the Ordering API by calling SetAwaitingValidation.
 
-4. **Trigger payment**
-   - If stock is confirmed, invoke a Payment activity to start processing the payment.
+4. **Stock check**
+   - Call a Catalog api to validate stock for all order items (CheckStock).
+   
+5. **Stock Confirmation**
+    - If everything is available, notify the Ordering API that there is sufficient stock (ConfirmThatHasStock). The Ordering API records the order as “stock confirmed.”
+    - If any item is missing, notify the Ordering API that there is insufficient stock (ConfirmThatHasNoStock). The Ordering API records “stock rejected” with item-level details and marks the order as cancelled.
 
-5. **Wait for payment outcome (signals)**
+6. **Trigger payment**
+   - If stock is confirmed, invoke a Payment activity to start processing the payment (StartPaymentFlow).
+
+7. **Wait for payment outcome (signals)**
    - The workflow waits for external **signals** indicating payment success or failure.
-   - On success: mark the order as *Paid* and optionally trigger a Catalog activity to decrement stock.
-   - On failure: mark the order as *Cancelled*.
+   
+8. **Payment confirmation**
+   - On success: mark the order as *Paid* (SetPaidOrderStatus).
+   - On failure: mark the order as *Cancelled* (CancelOrder).
 
-6. **Finalize**
-   - The workflow completes, leaving behind a full execution history you can inspect in the Temporal UI.
+9. **Finalize**
+   - Decrement  stock (RemoveStock).
 
 All external calls (Ordering, Catalog, Payment) are implemented as **Temporal activities** with shared retry and logging configuration, giving you durability and consistent error handling across the saga. 
 
