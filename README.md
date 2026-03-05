@@ -132,3 +132,33 @@ https://github.com/temporalio/docker-compose/blob/main/docker-compose-postgres.y
 For more details about Aspire hosting integrations, see the [Aspire documentation](https://learn.microsoft.com/en-us/dotnet/aspire/extensibility/custom-hosting-integration)
 and about migrate from docker compose to Aspire see  [Migrate from Docker Compose to Aspire](https://learn.microsoft.com/en-us/dotnet/aspire/get-started/migrate-from-docker-compose)
 
+# How to Run and Test
+
+This project is a reimplementation of the reference app [eShop](https://github.com/dotnet/eShop). To run it successfully, make sure your environment meets the same prerequisites as the original project.
+
+## Prerequisites
+Before running the solution, make sure you meet the requirements described in  [eShop Getting Started](https://github.com/dotnet/eShop?tab=readme-ov-file#getting-started)  
+such as having  [.NET 9](https://dotnet.microsoft.com/) and [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running.
+
+## Running the Solution
+
+After cloning this repository, follow the same steps described in the official eShop documentation [Running the solution](https://github.com/dotnet/eShop?tab=readme-ov-file#running-the-solution).
+
+## Testing the Order Workflow
+
+To trigger and test an order workflow:
+
+1. Open the **Online Store** web application.
+   - You can find its URL in the **Aspire Dashboard**.
+
+   ![Online Store URL](img/WebAppUrl.png)
+
+2. Use the store like a normal sports e-commerce application.
+   - Add items to the shopping cart.
+   - Proceed to checkout and submit an order.
+
+3. After submitting the order, review the workflow execution in **Temporal**.
+   - Open the **Temporal UI** using the URL shown in the **Aspire Dashboard**.
+   - Check the **Event History** to inspect the order workflow.
+
+   ![Temporal UI URL](img/TemporalUIUrl.png)
