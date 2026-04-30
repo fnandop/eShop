@@ -20,13 +20,13 @@ The original eShop saga is already a reference for event-driven microservices; t
 
 ## Original eShop saga (baseline)
 
-#### Happy path
+### Happy path
 ![Choreographed saga — happy path](img/EShopSaga-happy.png)
 
-#### Alt path: Stock unavailable
+### Alt path: Stock unavailable
 ![Choreographed saga — no stock](img/EShopSaga-no-stock.png)
 
-#### Alt path: Payment failure
+### Alt path: Payment failure
 ![Choreographed saga — payment failure](img/EShopSaga-payment-fail.png)
 
 > **Detailed static diagram:** [EShopSaga.drawio.svg](img/EShopSaga.drawio.svg)
@@ -91,17 +91,15 @@ sequenceDiagram
     end
 ```
 
-
-
 ## Temporal-based saga
 
-#### Happy path
+### Happy path
 ![Temporal saga — happy path](img/EShopSagaTemporal-happy.png)
 
-#### Alt path: Stock unavailable
+### Alt path: Stock unavailable
 ![Temporal saga — no stock](img/EShopSagaTemporal-no-stock.png)
 
-#### Alt path: Payment failure
+### Alt path: Payment failure
 ![Temporal saga — payment failure](img/EShopSagaTemporal-payment-fail.png)
 
 > **Detailed static diagram:** [EShopSagaTemporal.drawio.svg](img/EShopSagaTemporal.drawio.svg)
@@ -142,10 +140,10 @@ Conceptually, the workflow does:
 
 All external calls (Ordering, Catalog, Payment) are implemented as **Temporal activities** with shared retry and logging configuration, giving you durability and consistent error handling across the saga. 
 
-![Orders List](img/OrdersList.png)
-![Orders List](img/TemporalWorkfloHappyPath.png)
-![Orders List](img/TemporalWorkfloNoStock.png)
-![Orders List](img/TemporalWorkfloNoMoney.png)
+![Orders list — Temporal workflow](img/OrdersList.png)
+![Temporal workflow — happy path event history](img/TemporalWorkfloHappyPath.png)
+![Temporal workflow — no-stock event history](img/TemporalWorkfloNoStock.png)
+![Temporal workflow — payment-failed event history](img/TemporalWorkfloNoMoney.png)
 
 ### Orchestration flow — sequence diagrams
 
@@ -168,6 +166,8 @@ sequenceDiagram
     W->>PAY: InitiatePayment (Activity)
     PAY-)W: Signal: NotifyOrderPaymentSucceeded
     W->>O: SetPaidOrderStatus (Activity)
+    W->>O: RemoveStock (Activity)
+    Note over W,O: Workflow ends -- order Paid
 ```
 
 #### No-stock path
