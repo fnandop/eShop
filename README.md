@@ -20,8 +20,17 @@ The original eShop saga is already a reference for event-driven microservices; t
 
 ## Original eShop saga (baseline)
 
+### Happy path
+![Choreographed saga — happy path](img/EShopSaga-happy.png)
 
-![Original eShop saga](img/EShopSaga.drawio.svg)
+### Alt path: Stock unavailable
+![Choreographed saga — no stock](img/EShopSaga-no-stock.png)
+
+### Alt path: Payment failure
+![Choreographed saga — payment failure](img/EShopSaga-payment-fail.png)
+
+> **Detailed static diagram:** [EShopSaga.drawio.svg](img/EShopSaga.drawio.svg)
+
 In the reference application, an order moves through its lifecycle via domain and integration events published between services:
 
 1. **Checkout**  
@@ -48,11 +57,52 @@ or implmenent the ship part after the payment is successful.But let keep it simp
 
 All of this is modeled as a **choreographed saga**: there is no central coordinator; each service reacts to events and emits new events.
 
+### Message flow — sequence diagram
 
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as ClientApp
+    participant O as Ordering.API
+    participant DB as OrderingDB
+    participant OP as OrderProcessor
+    participant CAT as Catalog.API
+    participant PAY as Payment
+
+    C->>O: POST /api/Orders (checkout)
+    O->>DB: Save order (Pending)
+    OP-->>DB: Poll — grace period elapsed?
+    OP-)O: GracePeriodConfirmedIntegrationEvent
+    O-)CAT: OrderStatusChangedToAwaitingValidationIntegrationEvent
+
+    alt Stock available
+        CAT-)O: OrderStockConfirmedIntegrationEvent
+        O-)PAY: OrderStatusChangedToStockConfirmedIntegrationEvent
+        alt Payment succeeded
+            PAY-)O: OrderPaymentSucceededIntegrationEvent
+            O->>DB: Status = Paid, decrement stock
+        else Payment failed
+            PAY-)O: OrderPaymentFailedIntegrationEvent
+            O->>DB: Status = Cancelled
+        end
+    else Stock rejected
+        CAT-)O: OrderStockRejectedIntegrationEvent
+        O->>DB: Status = Cancelled
+    end
+```
 
 ## Temporal-based saga
 
-![Temporal eShop saga](img/EShopSagaTemporal.drawio.svg)
+### Happy path
+![Temporal saga — happy path](img/EShopSagaTemporal-happy.png)
+
+### Alt path: Stock unavailable
+![Temporal saga — no stock](img/EShopSagaTemporal-no-stock.png)
+
+### Alt path: Payment failure
+![Temporal saga — payment failure](img/EShopSagaTemporal-payment-fail.png)
+
+> **Detailed static diagram:** [EShopSagaTemporal.drawio.svg](img/EShopSagaTemporal.drawio.svg)
 
 In this fork, that same business process is expressed as a **Temporal workflow**  [`EShopWorkflow.cs`](./src/Temporal.Workflow/EShopWorkflow.cs) that becomes the single source of truth for the order lifecycle.
 
@@ -90,10 +140,75 @@ Conceptually, the workflow does:
 
 All external calls (Ordering, Catalog, Payment) are implemented as **Temporal activities** with shared retry and logging configuration, giving you durability and consistent error handling across the saga. 
 
-![Orders List](img/OrdersList.png)
-![Orders List](img/TemporalWorkfloHappyPath.png)
-![Orders List](img/TemporalWorkfloNoStock.png)
-![Orders List](img/TemporalWorkfloNoMoney.png)
+![Orders list — Temporal workflow](img/OrdersList.png)
+![Temporal workflow — happy path event history](img/TemporalWorkfloHappyPath.png)
+![Temporal workflow — no-stock event history](img/TemporalWorkfloNoStock.png)
+![Temporal workflow — payment-failed event history](img/TemporalWorkfloNoMoney.png)
+
+### Orchestration flow — sequence diagrams
+
+#### Happy path
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant W as EShopWorkflow
+    participant O as Ordering.API
+    participant CAT as Catalog.API
+    participant PAY as PaymentProcessor
+
+    W->>O: CreateOrder (Activity)
+    Note over W: Timer - 5 s grace period
+    W->>O: SetAwaitingValidation (Activity)
+    W->>CAT: CheckStock (Activity)
+    CAT-->>W: StockConfirmed = true
+    W->>O: ConfirmThatHasStock (Activity)
+    W->>PAY: InitiatePayment (Activity)
+    PAY-)W: Signal: NotifyOrderPaymentSucceeded
+    W->>O: SetPaidOrderStatus (Activity)
+    W->>O: RemoveStock (Activity)
+    Note over W,O: Workflow ends -- order Paid
+```
+
+#### No-stock path
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant W as EShopWorkflow
+    participant O as Ordering.API
+    participant CAT as Catalog.API
+
+    W->>O: CreateOrder (Activity)
+    Note over W: Timer - 5 s grace period
+    W->>O: SetAwaitingValidation (Activity)
+    W->>CAT: CheckStock (Activity)
+    CAT-->>W: StockConfirmed = false
+    W->>O: ConfirmThatHasNoStock (Activity)
+    Note over W,O: Workflow ends -- order Cancelled
+```
+
+#### Payment-failed path
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant W as EShopWorkflow
+    participant O as Ordering.API
+    participant CAT as Catalog.API
+    participant PAY as PaymentProcessor
+
+    W->>O: CreateOrder (Activity)
+    Note over W: Timer - 5 s grace period
+    W->>O: SetAwaitingValidation (Activity)
+    W->>CAT: CheckStock (Activity)
+    CAT-->>W: StockConfirmed = true
+    W->>O: ConfirmThatHasStock (Activity)
+    W->>PAY: InitiatePayment (Activity)
+    PAY-)W: Signal: NotifyOrderPaymentFailed
+    W->>O: CancelOrder (Activity)
+    Note over W,O: Workflow ends -- order Cancelled
+```
 
 ### The Integration Events
 In this implementation, integration events are no longer the *center of the universe*, because they are no longer used to drive the saga. However, this does not mean they are not used at all. Some of them have been removed, but the ones published by the Order API when the order status changes are still there, because they are used to notify, in particular, the UI components about order status changes.

@@ -491,3 +491,6 @@ $RECYCLE.BIN/
 /playwright/.auth/
 /user.json
 .azure
+
+# Stray build artifacts in non-standard locations
+img/*.dll
