@@ -122,7 +122,10 @@ public static class CatalogApi
            .WithSummary("Check Stock")
            .WithDescription("Check Stock in the catalog");
 
-
+        api.MapPost("/remove-stock", RemoveStock)
+           .WithName("RemoveStock")
+           .WithSummary("Remove Stock")
+           .WithDescription("Decrement stock for a list of catalog items after a successful order payment.");
 
         return app;
     }
@@ -158,6 +161,28 @@ public static class CatalogApi
         return TypedResults.Ok(new CheckStockResult(checkStockRequest.OrderId, !confirmedOrderStockItems.Any(c => !c.HasStock), confirmedOrderStockItems));
 
 
+    }
+
+    public record RemoveStockRequest(IEnumerable<OrderStockItem> OrderStockItems);
+
+    public static async Task<Results<NoContent, NotFound<ProblemDetails>>> RemoveStock(
+        [AsParameters] CatalogServices services,
+        RemoveStockRequest removeStockRequest)
+    {
+        foreach (var orderStockItem in removeStockRequest.OrderStockItems)
+        {
+            var catalogItem = await services.Context.CatalogItems.FindAsync(orderStockItem.ProductId);
+            if (catalogItem is null)
+            {
+                return TypedResults.NotFound<ProblemDetails>(new()
+                {
+                    Detail = $"Catalog item with id {orderStockItem.ProductId} not found."
+                });
+            }
+            catalogItem.RemoveStock(orderStockItem.Units);
+        }
+        await services.Context.SaveChangesAsync();
+        return TypedResults.NoContent();
     }
 
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest, "application/problem+json")]

@@ -67,8 +67,9 @@ namespace Temporal.Workflow
                 await Temporalio.Workflows.Workflow.ExecuteActivityAsync((EShopActivities act) => act.SetPaidOrderStatus(_orderId),
                        new ActivityOptions { StartToCloseTimeout = TimeSpan.FromMinutes(5), RetryPolicy = retryPolicy });
 
-                //TODO update stock in catalog service
-
+                await Temporalio.Workflows.Workflow.ExecuteActivityAsync(
+                    (EShopActivities act) => act.RemoveStock(_orderId, orderRequest.Items),
+                    new ActivityOptions { StartToCloseTimeout = TimeSpan.FromMinutes(5), RetryPolicy = retryPolicy });
             }
             else if (_paymentStatus == PaymentStatus.Failed)
             {

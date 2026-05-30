@@ -20,7 +20,7 @@ public static class OrdersApi
         api.MapPost("/create", CreateOrderAsync);
         api.MapPatch("{orderId:int}/awaiting-validation", SetAwaitingValidation);
         api.MapPatch("{orderId:int}/confirm-stock", ConfirmStock);
-        api.MapPatch("{orderId:int}/stock-regected", SetStockRejected);
+        api.MapPatch("{orderId:int}/stock-rejected", SetStockRejected);
         api.MapPatch("{orderId:int}/paid", SetOderPaid);
         api.MapPatch("{orderId:int}/cancel", CancelOrder);
 

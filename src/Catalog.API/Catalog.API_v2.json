@@ -625,6 +625,53 @@
         }
       }
     },
+    "/api/catalog/remove-stock": {
+      "post": {
+        "tags": [
+          "Catalog"
+        ],
+        "summary": "Remove Stock",
+        "description": "Decrement stock for a list of catalog items after a successful order payment.",
+        "operationId": "RemoveStock",
+        "parameters": [
+          {
+            "name": "api-version",
+            "in": "query",
+            "description": "The API version, in the format 'major.minor'.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "2.0"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemoveStockRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/catalog/items/withsemanticrelevance": {
       "get": {
         "tags": [
@@ -1021,6 +1068,20 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "RemoveStockRequest": {
+        "required": [
+          "orderStockItems"
+        ],
+        "type": "object",
+        "properties": {
+          "orderStockItems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrderStockItem"
+            }
           }
         }
       }

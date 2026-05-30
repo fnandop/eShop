@@ -10,6 +10,39 @@ It starts from the official [.NET Aspire–based eShop reference app](https://gi
 
 The goal is to compare a traditional event-choreographed saga with a centrally orchestrated, durable workflow. 
 
+## Quick start
+
+This project is a reimplementation of the reference app [eShop](https://github.com/dotnet/eShop). To run it successfully, make sure your environment meets the same prerequisites as the original project, plus Docker for the backing services and Temporal server.
+
+### Prerequisites
+
+- **[.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)** — required to build and run the solution. The project pins `10.0.100` via `global.json` and allows roll-forward to newer .NET 10 feature bands.
+- **[.NET Aspire workload](https://learn.microsoft.com/en-us/dotnet/aspire/fundamentals/setup-tooling)** — install after the SDK with `dotnet workload install aspire`.
+- **[Docker Desktop](https://www.docker.com/products/docker-desktop/)** — required to run PostgreSQL, Redis, and the Temporal server container.
+- **Git** — to clone the repository.
+
+### Run locally
+
+```bash
+git clone https://github.com/fnandop/eshop-temporal-io.git
+cd eshop-temporal-io
+dotnet run --project src/eShop.AppHost/eShop.AppHost.csproj
+```
+
+After the Aspire dashboard starts, open the dashboard URL printed in the console. Verify that `temporal`, `temporalui`, `postgres`, `redis`, `ordering-api`, `catalog-api`, `payment-api`, and `webapp` are healthy.
+
+To trigger the Temporal order workflow:
+
+1. Open the `webapp` endpoint from the Aspire dashboard.
+2. Add catalog items to the cart and place an order.
+3. Open the `temporalui` endpoint and inspect the workflow history.
+
+The workflow should show `CreateOrder`, the grace-period timer, stock validation, payment initiation, a payment success or failure signal, and the final order status update. See [How to Run and Test](#how-to-run-and-test) for detailed scenario testing and troubleshooting.
+
+### Production notes
+
+This is an educational sample. The payment callback is simulated, the local Temporal server uses the `auto-setup` Docker image, Temporal authentication is not configured, and stock decrement is intentionally simple. See [Known Limitations](#known-limitations) for details.
+
 
 ## Motivation
 
@@ -49,7 +82,7 @@ In the reference application, an order moves through its lifecycle via domain an
    - Payment responds with either `OrderPaymentSucceededIntegrationEvent` or `OrderPaymentFailedIntegrationEvent`.
 
 5. **Completion / compensation**  
-   - On success: the order is marked as *Paid* and stock is decremented.  
+   - On success: Ordering marks the order as *Paid* and publishes `OrderStatusChangedToPaidIntegrationEvent`. Catalog handles this event and decrements stock for each item.  
    - On failure (stock or payment): the order is set to *Cancelled*.
 
 We can extend the saga and make it more complex for example implementing some product reservation logic in the Catalog service, and then compensating that reservation if the payment fails,
@@ -80,7 +113,9 @@ sequenceDiagram
         O-)PAY: OrderStatusChangedToStockConfirmedIntegrationEvent
         alt Payment succeeded
             PAY-)O: OrderPaymentSucceededIntegrationEvent
-            O->>DB: Status = Paid, decrement stock
+            O->>DB: Status = Paid
+            O-)CAT: OrderStatusChangedToPaidIntegrationEvent
+            CAT->>CAT: RemoveStock (per item)
         else Payment failed
             PAY-)O: OrderPaymentFailedIntegrationEvent
             O->>DB: Status = Cancelled
@@ -166,8 +201,8 @@ sequenceDiagram
     W->>PAY: InitiatePayment (Activity)
     PAY-)W: Signal: NotifyOrderPaymentSucceeded
     W->>O: SetPaidOrderStatus (Activity)
-    W->>O: RemoveStock (Activity)
-    Note over W,O: Workflow ends -- order Paid
+    W->>CAT: RemoveStock (Activity)
+    Note over W,O: Workflow ends -- Stock Removed
 ```
 
 #### No-stock path
@@ -240,40 +275,109 @@ To keep everything self-contained, the Temporal server runs as part of the Aspir
 
 - The AddTemporal call returns a [`TemporalResource.cs`](./src/Temporal.Hosting/TemporalResource.cs)  instance that represents the Temporal server resource within the Aspire host.
 
-- These extension methods are essentially a code-based implementation of the Docker Compose setup found here:
+These extension methods are essentially a code-based implementation of the Docker Compose setup found here:
 https://github.com/temporalio/docker-compose/blob/main/docker-compose-postgres.yml
 
+> The local `Temporal.Hosting` integration is a work-in-progress and will eventually be replaced by the standalone NuGet package at [github.com/fnandop/nando-aspire-temporal](https://github.com/fnandop/nando-aspire-temporal).
 
 For more details about Aspire hosting integrations, see the [Aspire documentation](https://learn.microsoft.com/en-us/dotnet/aspire/extensibility/custom-hosting-integration)
 and about migrate from docker compose to Aspire see  [Migrate from Docker Compose to Aspire](https://learn.microsoft.com/en-us/dotnet/aspire/get-started/migrate-from-docker-compose)
 
-# How to Run and Test
+## Payment signal pattern
 
-This project is a reimplementation of the reference app [eShop](https://github.com/dotnet/eShop). To run it successfully, make sure your environment meets the same prerequisites as the original project.
+To simulate the asynchronous callback that a real payment processor (e.g., Stripe) would send via webhook, the `PaymentProcessor` service runs its own short-lived Temporal workflow — [`PaymentWorkflowMockDelay.cs`](./src/PaymentProcessor/PaymentWorkflowMockDelay.cs).
 
-## Prerequisites
-Before running the solution, make sure you meet the requirements described in  [eShop Getting Started](https://github.com/dotnet/eShop?tab=readme-ov-file#getting-started)  
-such as having  [.NET 9](https://dotnet.microsoft.com/) and [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running.
+This workflow waits a few seconds (mimicking payment processing time), then signals the main `EShopWorkflow` by its workflow ID using one of two named signals:
 
-## Running the Solution
+- `NotifyOrderPaymentSucceeded` — when `PaymentOptions:PaymentSucceeded` is `true`
+- `NotifyOrderPaymentFailed` — when `PaymentOptions:PaymentSucceeded` is `false`
 
-After cloning this repository, follow the same steps described in the official eShop documentation [Running the solution](https://github.com/dotnet/eShop?tab=readme-ov-file#running-the-solution).
+`EShopWorkflow` blocks on `WaitConditionAsync` until one of these signals arrives, then proceeds accordingly. This is a clean demonstration of Temporal's **signal-based async callback pattern**: instead of a direct HTTP callback, the result is delivered durably through the Temporal server, surviving restarts and network interruptions on both sides.
+
+## How to Run and Test
+
+Use the [Quick start](#quick-start) section above to install prerequisites, clone the repository, and launch the Aspire host. This section focuses on verifying that the Temporal workflow is running correctly and exercising the main order scenarios.
+
+## Verify All Services Are Running
+
+In the Aspire Dashboard, confirm that all resources show as **Healthy**:
+
+| Resource | Status | Purpose |
+|----------|--------|---------|
+| **temporal** | ✅ Running | Temporal server (auto-setup image) |
+| **temporalui** | ✅ Running | Temporal Web UI (admin tools) |
+| **postgres** | ✅ Running | Shared PostgreSQL for Temporal and app services |
+| **redis** | ✅ Running | Caching for catalog and basket services |
+| **ordering-api** | ✅ Running | Order management microservice |
+| **catalog-api** | ✅ Running | Product catalog microservice |
+| **payment-api** | ✅ Running | Payment processing microservice |
+| **webapp** | ✅ Running | Client web application |
 
 ## Testing the Order Workflow
 
-To trigger and test an order workflow:
+### Step 1: Open the Online Store
 
-1. Open the **Online Store** web application.
-   - You can find its URL in the **Aspire Dashboard**.
+1. Navigate to the **Aspire Dashboard**.
+2. Find the **webapp** resource and click its endpoint URL.
+3. The Online Store should open in your browser.
 
-   ![Online Store URL](img/WebAppUrl.png)
+### Step 2: Place an Order
 
-2. Use the store like a normal sports e-commerce application.
-   - Add items to the shopping cart.
-   - Proceed to checkout and submit an order.
+1. Browse the catalog and add items to your shopping cart.
+2. Proceed to checkout and complete the order form.
+3. Click **Place Order**.
 
-3. After submitting the order, review the workflow execution in **Temporal**.
-   - Open the **Temporal UI** using the URL shown in the **Aspire Dashboard**.
-   - Check the **Event History** to inspect the order workflow.
+### Step 3: Monitor the Temporal Workflow
 
-   ![Temporal UI URL](img/TemporalUIUrl.png)
+1. In the **Aspire Dashboard**, find the **temporalui** resource.
+2. Click its endpoint to open the **Temporal Web UI**.
+3. Navigate to the **Workflows** section to see the active order workflow.
+4. Click on the workflow to view the **Event History**.
+
+The event history should show the workflow progressing through:
+- `CreateOrder` activity
+- Timer (grace period)
+- `SetAwaitingValidation` activity
+- `CheckStock` activity
+- Stock confirmation/rejection
+- `InitiatePayment` activity
+- Payment signal (success or failure)
+- Final status update (`SetPaidOrderStatus` or `CancelOrder`)
+- `RemoveStock` activity (on successful payment)
+
+### Step 4: Observe Different Scenarios
+
+To test the alternative paths:
+
+| Scenario | How to Trigger | Expected Outcome |
+|----------|----------------|-------------------|
+| **Payment Failure** | Set `PaymentOptions:PaymentSucceeded` to `false` in `src/PaymentProcessor/appsettings.json` (default) | Workflow receives `NotifyOrderPaymentFailed` signal, order is cancelled |
+| **Payment Success** | Set `PaymentOptions:PaymentSucceeded` to `true` in `src/PaymentProcessor/appsettings.json` | Workflow receives `NotifyOrderPaymentSucceeded` signal, order is paid |
+| **Stock Unavailable** | Add an item to cart, then manually reduce stock in the catalog via API, or add an item in a quantity exceeding its available stock | Workflow receives stock rejection, order is cancelled |
+
+> `appsettings.json` changes require restarting the corresponding service to take effect.
+
+---
+
+## Known Limitations
+
+This is an **experimental implementation** and intentionally differs from a production setup in the following ways:
+
+| Area | Production Consideration |
+|------|---------------------------|
+| **Payment Signal** | The payment completion signal is simulated. In production, this would be driven by an async webhook or event from the payment processor. |
+| **Security** | No authentication is configured for Temporal workflows. Production would require secure namespaces, mTLS, and workflow-level authorization. |
+| **Temporal Server** | Uses the `auto-setup` Docker image for development. Production deployments should use a dedicated Temporal cluster with proper storage and high availability configuration. |
+| **Stock Decrement** | The `RemoveStock` activity decrements inventory without a distributed lock. In production, consider stock reservation with a timeout to prevent overselling under high concurrency. |
+| **Grace Period** | The 5-second grace period is hardcoded for demonstration. A production system would expose this as a configurable parameter per order or tenant. |
+
+---
+
+## Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| **Dashboard shows resources as unhealthy** | Ensure Docker Desktop is running. Restart the containers from the Aspire dashboard. |
+| **Temporal UI is not accessible** | Check that the `temporalui` resource is healthy. Verify port mappings in Docker. |
+| **Workflow not starting** | Check the `eshop-app` logs in the Aspire dashboard for errors. Verify the ordering API is reachable. |
+| **dotnet run fails** | Ensure .NET 10 SDK is installed: `dotnet --version`. Clean and rebuild: `dotnet clean && dotnet build`. |

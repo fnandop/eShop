@@ -13,7 +13,7 @@ public interface IOrderService
     [Patch("/api/orders/{orderId}/confirm-stock?api-version=1.0")]
     Task ConfirmStockAsync(int orderId);
 
-    [Patch("/api/orders/{orderId}/stock-regected?api-version=1.0")]
+    [Patch("/api/orders/{orderId}/stock-rejected?api-version=1.0")]
     Task ConfirmStockRejectedAsync(int orderId, [Body] IEnumerable<ConfirmedOrderStockItem> orderStockItems);
     public record ConfirmedOrderStockItem(int ProductId, bool HasStock);
 

@@ -6,8 +6,8 @@ namespace PaymentProcessor
 {
 
     /// <summary>
-    /// This work flow is just to simulate the delay between the payment sesstion start and the payment confirmation, otherwise we could consider 
-    /// to create a payment worklow as child of the main order workflow EShopWorkflow
+    /// This workflow simulates the delay between the payment session start and the payment confirmation.
+    /// It could alternatively be implemented as a child workflow of the main <see cref="EShopWorkflow"/>.
     /// </summary>
     [Workflow]
     public class PaymentWorkflowMockDelay
@@ -19,11 +19,11 @@ namespace PaymentProcessor
         public async Task RunAsync(int OrderId, string orderyGuid)
         {
 
-            //Simulate payment flow delay, between the checkout and the receivment of  callback from an payment service
+            // Simulate payment processing delay, between checkout and the callback from the payment service.
             await Temporalio.Workflows.Workflow.DelayAsync(TimeSpan.FromSeconds(5));
 
-            // After delay, simulate that a callback from the payment service has been received  signal the workflow that payment succeeded or failed
-            // similar to https://docs.stripe.com/payments/checkout/how-checkout-works?payment-ui=stripe-hosted#complete-transaction
+            // After the delay, simulate a callback from the payment service by signaling the main workflow.
+            // Similar to https://docs.stripe.com/payments/checkout/how-checkout-works?payment-ui=stripe-hosted#complete-transaction
             await Temporalio.Workflows.Workflow.ExecuteActivityAsync(
                             (PaymentWorkflowMockDelayActivities act) => act.NotifyOrderPaymentResult(OrderId, orderyGuid),
                             new ActivityOptions { StartToCloseTimeout = TimeSpan.FromMinutes(5) });
