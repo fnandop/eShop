@@ -54,13 +54,13 @@ The original eShop saga is already a reference for event-driven microservices; t
 ## Original eShop saga (baseline)
 
 ### Happy path
-![Choreographed saga — happy path](img/EShopSaga-happy.png)
+![Choreographed saga — happy path](img/EShopSaga-happy.gif)
 
 ### Alt path: Stock unavailable
-![Choreographed saga — no stock](img/EShopSaga-no-stock.png)
+![Choreographed saga — no stock](img/EShopSaga-no-stock.gif)
 
 ### Alt path: Payment failure
-![Choreographed saga — payment failure](img/EShopSaga-payment-fail.png)
+![Choreographed saga — payment failure](img/EShopSaga-payment-fail.gif)
 
 > **Detailed static diagram:** [EShopSaga.drawio.svg](img/EShopSaga.drawio.svg)
 
@@ -84,7 +84,7 @@ In the reference application, an order moves through its lifecycle via domain an
 5. **Completion / compensation**  
    - On success: Ordering marks the order as *Paid* and publishes `OrderStatusChangedToPaidIntegrationEvent`. Catalog handles this event and decrements stock for each item.  
    - On failure (stock or payment): the order is set to *Cancelled*.
-
+   gi
 We can extend the saga and make it more complex for example implementing some product reservation logic in the Catalog service, and then compensating that reservation if the payment fails,
 or implmenent the ship part after the payment is successful.But let keep it simple.
 
@@ -129,13 +129,13 @@ sequenceDiagram
 ## Temporal-based saga
 
 ### Happy path
-![Temporal saga — happy path](img/EShopSagaTemporal-happy.png)
+![Temporal saga — happy path](img/EShopSagaTemporal-happy.gif)
 
 ### Alt path: Stock unavailable
-![Temporal saga — no stock](img/EShopSagaTemporal-no-stock.png)
+![Temporal saga — no stock](img/EShopSagaTemporal-no-stock.gif)
 
 ### Alt path: Payment failure
-![Temporal saga — payment failure](img/EShopSagaTemporal-payment-fail.png)
+![Temporal saga — payment failure](img/EShopSagaTemporal-payment-fail.gif)
 
 > **Detailed static diagram:** [EShopSagaTemporal.drawio.svg](img/EShopSagaTemporal.drawio.svg)
 

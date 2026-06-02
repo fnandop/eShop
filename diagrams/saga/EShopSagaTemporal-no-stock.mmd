@@ -1,0 +1,25 @@
+%% output: ../../img/EShopSagaTemporal-no-stock.gif
+%% delay: 1200
+%% width: 1500
+%% height: 960
+%% title: Temporal saga - stock unavailable
+sequenceDiagram
+    autonumber
+    participant W as EShopWorkflow
+    participant O as Ordering.API
+    participant CAT as Catalog.API
+
+    %% frame: Workflow creates the order
+    W->>O: 🔗 API CreateOrder (Activity)
+    %% frame: Durable timer waits
+    Note over W: ⏱ Timer - 5 s grace period
+    %% frame: Ordering enters validation
+    W->>O: 🔗 API SetAwaitingValidation (Activity)
+    %% frame: Workflow checks stock
+    W->>CAT: 🔗 API CheckStock (Activity)
+    %% frame: Stock is rejected
+    CAT-->>W: ❌ StockConfirmed = false
+    %% frame: Ordering records missing stock
+    W->>O: 🔗 API ConfirmThatHasNoStock (Activity)
+    %% frame: Workflow completes
+    Note over W,O: ❌ Workflow ends - order cancelled

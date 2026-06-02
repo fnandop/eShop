@@ -1,0 +1,29 @@
+%% output: ../../img/EShopSaga-no-stock.gif
+%% delay: 1200
+%% width: 1500
+%% height: 960
+%% title: Choreographed saga - stock unavailable
+sequenceDiagram
+    autonumber
+    participant C as ClientApp
+    participant O as Ordering.API
+    participant DB as OrderingDB
+    participant OP as OrderProcessor
+    participant CAT as Catalog.API
+
+    %% frame: Checkout starts
+    C->>O: 🛒 API POST /api/Orders (checkout)
+    %% frame: Order is persisted
+    O->>DB: 💾 Save order (Pending)
+    %% frame: Grace period elapses
+    OP-->>DB: ⏱ Poll - grace period elapsed?
+    %% frame: Ordering resumes validation
+    OP-)O: ✉ GracePeriodConfirmedIntegrationEvent
+    %% frame: Catalog validates stock
+    O-)CAT: ✉ OrderStatusChangedToAwaitingValidationIntegrationEvent
+    %% frame: Stock is rejected
+    CAT-)O: ✉ OrderStockRejectedIntegrationEvent
+    %% frame: Order is cancelled
+    O->>DB: ❌ Status = Cancelled
+    %% frame: Saga completes
+    Note over O,CAT: ❌ Order cancelled - stock unavailable
