@@ -1,0 +1,34 @@
+%% output: ../../img/EShopSaga-payment-fail.gif
+%% delay: 1200
+%% width: 1500
+%% height: 960
+%% title: Choreographed saga - payment failure
+sequenceDiagram
+    autonumber
+    participant C as ClientApp
+    participant O as Ordering.API
+    participant DB as OrderingDB
+    participant OP as OrderProcessor
+    participant CAT as Catalog.API
+    participant PAY as Payment
+
+    %% frame: Checkout starts
+    C->>O: 🛒 API POST /api/Orders (checkout)
+    %% frame: Order is persisted
+    O->>DB: 💾 Save order (Pending)
+    %% frame: Grace period elapses
+    OP-->>DB: ⏱ Poll - grace period elapsed?
+    %% frame: Ordering resumes validation
+    OP-)O: ✉ GracePeriodConfirmedIntegrationEvent
+    %% frame: Catalog validates stock
+    O-)CAT: ✉ OrderStatusChangedToAwaitingValidationIntegrationEvent
+    %% frame: Stock is confirmed
+    CAT-)O: ✉ OrderStockConfirmedIntegrationEvent
+    %% frame: Payment is requested
+    O-)PAY: ✉ OrderStatusChangedToStockConfirmedIntegrationEvent
+    %% frame: Payment fails
+    PAY-)O: ✉ OrderPaymentFailedIntegrationEvent
+    %% frame: Order is cancelled
+    O->>DB: ❌ Status = Cancelled
+    %% frame: Saga completes
+    Note over O,PAY: ❌ Order cancelled - payment failed

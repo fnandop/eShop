@@ -1,0 +1,34 @@
+%% output: ../../img/EShopSagaTemporal-happy.gif
+%% delay: 1200
+%% width: 1500
+%% height: 960
+%% title: Temporal saga - happy path
+sequenceDiagram
+    autonumber
+    participant W as EShopWorkflow
+    participant O as Ordering.API
+    participant CAT as Catalog.API
+    participant PAY as PaymentProcessor
+
+    %% frame: Workflow creates the order
+    W->>O: 🔗 API CreateOrder (Activity)
+    %% frame: Durable timer waits
+    Note over W: ⏱ Timer - 5 s grace period
+    %% frame: Ordering enters validation
+    W->>O: 🔗 API SetAwaitingValidation (Activity)
+    %% frame: Workflow checks stock
+    W->>CAT: 🔗 API CheckStock (Activity)
+    %% frame: Stock is confirmed
+    CAT-->>W: ✅ StockConfirmed = true
+    %% frame: Ordering records stock confirmation
+    W->>O: 🔗 API ConfirmThatHasStock (Activity)
+    %% frame: Payment starts
+    W->>PAY: 🔗 API InitiatePayment (Activity)
+    %% frame: Payment success signal arrives
+    PAY-)W: ⚡ Signal: NotifyOrderPaymentSucceeded
+    %% frame: Order is paid
+    W->>O: 🔗 API SetPaidOrderStatus (Activity)
+    %% frame: Stock is removed
+    W->>CAT: 🔗 API RemoveStock (Activity)
+    %% frame: Workflow completes
+    Note over W,O: ✅ Workflow ends - stock removed
